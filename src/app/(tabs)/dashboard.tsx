@@ -14,6 +14,8 @@ import {
   getTotalPenjualanBulanan,
   getTotalItemTerjual,
   getDailySalesChart,
+  getPeriodStats,
+  getPeriodReturStats,
 } from '@/db/queries/transaksi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -25,7 +27,16 @@ export default function DashboardScreen() {
   const [dailyTotal, setDailyTotal] = useState(0);
   const [monthlyTotal, setMonthlyTotal] = useState(0);
   const [itemsSold, setItemsSold] = useState(0);
-  const [chartData, setChartData] = useState<{ tanggal: string; total: number }[]>([]);
+  const [chartData, setChartData] = useState<{
+    tanggal: string;
+    total: number;
+    dwp: number;
+    mona: number;
+    harian: number;
+    kering: number;
+  }[]>([]);
+  const [periodSales, setPeriodSales] = useState({ kotor: 0, potongan: 0, bersih: 0 });
+  const [periodRetur, setPeriodRetur] = useState({ qty: 0, nilai: 0 });
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -34,18 +45,23 @@ export default function DashboardScreen() {
 
       const dateForQuery = viewMode === 'harian' ? selectedDate : today;
       const monthForQuery = viewMode === 'bulanan' ? filter.bulan : currentMonth;
+      const periodForQuery = viewMode === 'harian' ? selectedDate : filter.bulan;
 
-      const [daily, monthly, items, chart] = await Promise.all([
+      const [daily, monthly, items, chart, pSales, pRetur] = await Promise.all([
         getTotalPenjualanHariIni(filter.penyediaId, dateForQuery),
         getTotalPenjualanBulanan(monthForQuery, filter.penyediaId),
         getTotalItemTerjual(dateForQuery, filter.penyediaId),
         getDailySalesChart(7, filter.penyediaId),
+        getPeriodStats(periodForQuery, filter.penyediaId),
+        getPeriodReturStats(periodForQuery, filter.penyediaId),
       ]);
 
       setDailyTotal(daily);
       setMonthlyTotal(monthly);
       setItemsSold(items);
-      setChartData(chart);
+      setChartData(chart as any);
+      setPeriodSales(pSales);
+      setPeriodRetur(pRetur);
     } catch (e) {
       console.error('Dashboard load error:', e);
     }
@@ -145,22 +161,38 @@ export default function DashboardScreen() {
         {/* Stat Cards */}
         <View style={styles.statsRow}>
           <StatCard
-            title={viewMode === 'harian' ? `Pendapatan ${selectedDate.slice(-5)}` : 'Pendapatan Hari Ini'}
-            value={formatRupiah(dailyTotal)}
+            title={viewMode === 'harian' ? 'Kotor Hari Ini' : 'Kotor Bulan Ini'}
+            value={formatRupiah(periodSales.kotor)}
             icon="cash"
             color={Colors.primary}
           />
+          {viewMode === 'harian' && (
+            <StatCard
+              title="Kotor Bulan Ini"
+              value={formatRupiah(monthlyTotal)}
+              icon="calendar-month"
+              color={Colors.primaryLight}
+            />
+          )}
           <StatCard
-            title={viewMode === 'bulanan' ? `Pendapatan ${filter.bulan}` : 'Pendapatan Bulan Ini'}
-            value={formatRupiah(monthlyTotal)}
-            icon="calendar-month"
-            color={Colors.secondary}
-          />
-          <StatCard
-            title={viewMode === 'harian' ? `Item Terjual ${selectedDate.slice(-5)}` : 'Item Terjual Hari Ini'}
+            title={viewMode === 'harian' ? 'Item Terjual Hari Ini' : 'Item Terjual Bulan Ini'}
             value={`${itemsSold} pcs`}
             icon="package-variant-closed"
             color={Colors.accent}
+          />
+          <StatCard
+            title={viewMode === 'harian' ? 'Retur Hari Ini' : 'Retur Bulan Ini'}
+            value={`${periodRetur.qty} pcs`}
+            subtitle={formatRupiah(periodRetur.nilai)}
+            icon="keyboard-backspace"
+            color={Colors.danger}
+          />
+          <StatCard
+            title={viewMode === 'harian' ? 'Bersih Hari Ini' : 'Bersih Bulan Ini'}
+            value={formatRupiah(periodSales.kotor - periodSales.potongan - periodRetur.nilai)}
+            subtitle="Setelah Potongan RS & Retur"
+            icon="wallet"
+            color={Colors.secondary}
           />
         </View>
 
@@ -175,30 +207,69 @@ export default function DashboardScreen() {
               <Text style={styles.emptyChartText}>Belum ada data penjualan</Text>
             </View>
           ) : (
-            <View style={styles.barChart}>
-              {chartData.map((item, index) => {
-                const barHeight = Math.max((item.total / maxChartValue) * 120, 4);
-                const dayLabel = item.tanggal.slice(-2); // DD
+            <>
+              <View style={styles.barChart}>
+                {chartData.map((item, index) => {
+                  const barHeight = Math.max((item.total / maxChartValue) * 120, 4);
+                  const dayLabel = item.tanggal.slice(-2); // DD
 
-                return (
-                  <View key={index} style={styles.barItem}>
-                    <Text style={styles.barValue}>
-                      {item.total > 0 ? formatRupiah(item.total, true) : '-'}
-                    </Text>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          height: barHeight,
-                          backgroundColor: item.total > 0 ? Colors.primary : Colors.divider,
-                        },
-                      ]}
-                    />
-                    <Text style={styles.barLabel}>{dayLabel}</Text>
-                  </View>
-                );
-              })}
-            </View>
+                  return (
+                    <View key={index} style={styles.barItem}>
+                      <Text style={styles.barValue}>
+                        {item.total > 0 ? formatRupiah(item.total, true) : '-'}
+                      </Text>
+                      <View
+                        style={[
+                          styles.barContainer,
+                          {
+                            height: barHeight,
+                            backgroundColor: item.total > 0 ? 'transparent' : Colors.divider,
+                          },
+                        ]}
+                      >
+                        {item.total > 0 && (
+                          <>
+                            {item.dwp > 0 && (
+                              <View style={{ flex: item.dwp, backgroundColor: Colors.dwp }} />
+                            )}
+                            {item.mona > 0 && (
+                              <View style={{ flex: item.mona, backgroundColor: Colors.mona }} />
+                            )}
+                            {item.harian > 0 && (
+                              <View style={{ flex: item.harian, backgroundColor: Colors.harian }} />
+                            )}
+                            {item.kering > 0 && (
+                              <View style={{ flex: item.kering, backgroundColor: Colors.kering }} />
+                            )}
+                          </>
+                        )}
+                      </View>
+                      <Text style={styles.barLabel}>{dayLabel}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Chart Legend */}
+              <View style={styles.legendContainer}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: Colors.dwp }]} />
+                  <Text style={styles.legendLabel}>DWP</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: Colors.mona }]} />
+                  <Text style={styles.legendLabel}>Mona</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: Colors.harian }]} />
+                  <Text style={styles.legendLabel}>Harian</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: Colors.kering }]} />
+                  <Text style={styles.legendLabel}>Kering</Text>
+                </View>
+              </View>
+            </>
           )}
         </View>
 
@@ -338,15 +409,39 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontWeight: '600',
   },
-  bar: {
+  barContainer: {
     width: 32,
     borderRadius: 4,
     minHeight: 4,
+    overflow: 'hidden',
+    flexDirection: 'column',
   },
   barLabel: {
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 6,
+    fontWeight: '600',
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.sm,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendColor: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+  },
+  legendLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
     fontWeight: '600',
   },
   summaryCard: {

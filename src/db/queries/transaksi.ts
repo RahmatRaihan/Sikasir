@@ -183,7 +183,7 @@ export async function getTotalItemTerjual(tanggal: string, penyediaId?: number |
 }
 
 /**
- * Get daily sales data for chart (last N days)
+ * Get daily sales data for chart (last N days) with penyedia breakdown
  */
 export async function getDailySalesChart(days: number = 7, penyediaId?: number | null) {
   // Calculate date range
@@ -194,7 +194,7 @@ export async function getDailySalesChart(days: number = 7, penyediaId?: number |
 
   let query = supabase
     .from('transaksi_item')
-    .select('subtotal, transaksi!inner(tanggal)')
+    .select('subtotal, penyedia_id, transaksi!inner(tanggal)')
     .gte('transaksi.tanggal', startDateStr);
 
   if (penyediaId) {
@@ -207,15 +207,102 @@ export async function getDailySalesChart(days: number = 7, penyediaId?: number |
     return [];
   }
 
-  // Group by date
-  const grouped: Record<string, number> = {};
+  // Group by date and breakdown by penyedia
+  const grouped: Record<string, { total: number; dwp: number; mona: number; harian: number; kering: number }> = {};
+  
+  // Initialize last 7 days to make sure all days are represented, even if 0 sales
+  for (let i = days; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dStr = formatDateISO(d);
+    grouped[dStr] = { total: 0, dwp: 0, mona: 0, harian: 0, kering: 0 };
+  }
+
   (data || []).forEach((item: any) => {
     const tanggal = item.transaksi?.tanggal || '';
-    grouped[tanggal] = (grouped[tanggal] || 0) + (item.subtotal || 0);
+    if (grouped[tanggal] !== undefined) {
+      const sub = Number(item.subtotal) || 0;
+      grouped[tanggal].total += sub;
+      if (item.penyedia_id === 1) grouped[tanggal].dwp += sub;
+      else if (item.penyedia_id === 2) grouped[tanggal].mona += sub;
+      else if (item.penyedia_id === 3) grouped[tanggal].harian += sub;
+      else if (item.penyedia_id === 4) grouped[tanggal].kering += sub;
+    }
   });
 
   // Convert to array sorted by date
   return Object.entries(grouped)
-    .map(([tanggal, total]) => ({ tanggal, total }))
+    .map(([tanggal, val]) => ({
+      tanggal,
+      total: val.total,
+      dwp: val.dwp,
+      mona: val.mona,
+      harian: val.harian,
+      kering: val.kering,
+    }))
     .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+}
+
+/**
+ * Get sales stats (total kotor, potongan RS, bersih) for a period (date or month)
+ */
+export async function getPeriodStats(periode: string, penyediaId?: number | null) {
+  let query = supabase
+    .from('transaksi_item')
+    .select('subtotal, potongan_rs, transaksi!inner(tanggal)')
+    .ilike('transaksi.tanggal', `${periode}%`);
+  
+  if (penyediaId) {
+    query = query.eq('penyedia_id', penyediaId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('getPeriodStats error:', error.message);
+    return { kotor: 0, potongan: 0, bersih: 0 };
+  }
+
+  let kotor = 0;
+  let potongan = 0;
+
+  (data || []).forEach((item: any) => {
+    const sub = item.subtotal || 0;
+    kotor += sub;
+    if (item.potongan_rs === '10%') {
+      potongan += Math.round(sub * 0.1);
+    } else if (item.potongan_rs === '20%') {
+      potongan += Math.round(sub * 0.2);
+    }
+  });
+
+  return {
+    kotor,
+    potongan,
+    bersih: kotor - potongan,
+  };
+}
+
+/**
+ * Get return stats (qty pcs, nilai rupiah) for a period (date or month)
+ */
+export async function getPeriodReturStats(periode: string, penyediaId?: number | null) {
+  let query = supabase
+    .from('retur')
+    .select('qty_retur, produk!inner(penyedia_id, harga_jual)')
+    .ilike('tanggal', `${periode}%`);
+  
+  if (penyediaId) {
+    query = query.eq('produk.penyedia_id', penyediaId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('getPeriodReturStats error:', error.message);
+    return { qty: 0, nilai: 0 };
+  }
+
+  const qty = (data || []).reduce((sum, r: any) => sum + (r.qty_retur || 0), 0);
+  const nilai = (data || []).reduce((sum, r: any) => sum + (r.qty_retur * (r.produk?.harga_jual || 0)), 0);
+
+  return { qty, nilai };
 }
