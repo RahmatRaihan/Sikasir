@@ -1,11 +1,10 @@
-// Export Excel utility using SheetJS (xlsx)
-// Uses expo-file-system v56+ new API (File, Paths)
 import * as XLSX from 'xlsx';
 import { File, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { formatRupiah } from './formatRupiah';
 import type { LaporanHarian, RingkasanBagiHasil } from '../db/queries/laporan';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 /**
  * Export laporan to Excel (.xlsx) with 2 sheets
@@ -147,26 +146,65 @@ export async function exportLaporanExcel(
 
   XLSX.utils.book_append_sheet(wb, ws2, 'Ringkasan Bagi Hasil');
 
-  // Generate file as Uint8Array
-  const wbout = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-  const uint8 = new Uint8Array(wbout);
+  // Generate file as base64 and Uint8Array
+  const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+  const uint8 = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
   
   const fileName = `Laporan_${periodeLabel.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
 
-  // Write using new expo-file-system API (File + Paths)
+  // Write to cache first (for iOS or fallback)
   const file = new File(Paths.cache, fileName);
   file.create({ overwrite: true });
   file.bytes = uint8;
 
-  // Share the file (user can save to Files, Drive, WhatsApp, etc.)
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(file.uri, {
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      dialogTitle: `Simpan/Bagikan ${fileName}`,
-    });
+  const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  // Platform specific saving
+  if (Platform.OS === 'android') {
+    try {
+      // Minta izin ke user untuk memilih folder penyimpanan (misal: Downloads)
+      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      
+      if (permissions.granted) {
+        // Buat file kosong di folder yang dipilih
+        const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+          permissions.directoryUri,
+          fileName,
+          mimeType
+        );
+        
+        // Tulis data base64 ke file tersebut
+        await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        Alert.alert('Export Berhasil', `File Excel telah disimpan ke dalam penyimpanan internal Anda.\n\nNama file: ${fileName}`);
+        return uri;
+      } else {
+        // Jika batal pilih folder, fallback ke mode Share
+        await shareFallback(file.uri, mimeType, fileName);
+      }
+    } catch (e: any) {
+      console.error('SAF Error:', e);
+      // Fallback
+      await shareFallback(file.uri, mimeType, fileName);
+    }
   } else {
-    Alert.alert('Export Berhasil', `File disimpan di: ${file.uri}`);
+    // iOS / platform lain
+    await shareFallback(file.uri, mimeType, fileName);
   }
 
   return file.uri;
+}
+
+// Helper untuk fallback ke menu Share bawaan OS
+async function shareFallback(uri: string, mimeType: string, fileName: string) {
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(uri, {
+      mimeType,
+      dialogTitle: `Simpan/Bagikan ${fileName}`,
+    });
+  } else {
+    Alert.alert('Export Berhasil', `File disimpan di cache: ${uri}`);
+  }
 }
