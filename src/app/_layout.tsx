@@ -18,7 +18,6 @@ export default function RootLayout() {
       try {
         await initializeDatabase();
         await seedPenyedia();
-        await seedSampleProducts();
         setDbReady(true);
       } catch (e: any) {
         console.error('Database setup error:', e);
