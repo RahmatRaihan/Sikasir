@@ -1,0 +1,51 @@
+kode_barang,nama_produk,penyedia_id,potongan_rs,harga_jual,stok_fisik,is_deleted
+PRD-DWP-001,Kue Lumpur Kentang,1,10%,4000,25,0
+PRD-DWP-002,Risol Mayo Premium,1,10%,5000,30,0
+PRD-DWP-003,Pastel Ayam Telur,1,10%,4500,20,0
+PRD-DWP-004,Brownies Sekat Mini,1,20%,15000,15,0
+PRD-DWP-005,Roll Cake Cokelat,1,20%,8000,12,0
+PRD-DWP-006,Lemper Ayam Premium,1,none,3500,40,0
+PRD-DWP-007,Pie Buah Segar,1,10%,6000,15,0
+PRD-DWP-008,Croissant Butter,1,20%,12000,10,0
+PRD-DWP-009,Air Mineral DWP 330ml,1,none,2500,100,0
+PRD-DWP-010,Teh Kotak DWP,1,none,3500,60,0
+PRD-DWP-011,Roti Sobek Keju,1,10%,15000,8,0
+PRD-DWP-012,Donat Kampung Gula,1,none,3000,25,0
+PRD-MON-001,Cupcake Red Velvet,2,20%,10000,15,0
+PRD-MON-002,Cupcake Double Chocolate,2,20%,10000,15,0
+PRD-MON-003,Puding Silky Mangga,2,10%,6000,20,0
+PRD-MON-004,Puding Cokelat Oreo,2,10%,6500,20,0
+PRD-MON-005,Bolu Gulung Pandan,2,20%,25000,5,0
+PRD-MON-006,Cheese Tart Mini,2,20%,8500,12,0
+PRD-MON-007,Salad Buah Segar 250ml,2,10%,15000,10,0
+PRD-MON-008,Jus Alpukat Gula Aren,2,none,12000,15,0
+PRD-MON-009,Jus Strawberry Susu,2,none,10000,15,0
+PRD-MON-010,Mango Sago Dessert,2,10%,18000,8,0
+PRD-MON-011,Macaron Box isi 5,2,20%,35000,6,0
+PRD-MON-012,Korean Garlic Bread,2,20%,15000,10,0
+PRD-MON-013,Chiffon Cake Mini,2,10%,12000,8,0
+PRD-HRN-001,Nasi Rames Ayam Bakar,3,10%,22000,15,0
+PRD-HRN-002,Nasi Kuning Komplit,3,10%,18000,20,0
+PRD-HRN-003,Mie Goreng Jawa Spesial,3,none,15000,25,0
+PRD-HRN-004,Nasi Bento Katsu,3,10%,20000,15,0
+PRD-HRN-005,Gado-Gado Lontong,3,none,14000,10,0
+PRD-HRN-006,Tahu Bakso Semarang,3,none,3500,30,0
+PRD-HRN-007,Sosis Solo isi Ayam,3,none,3000,40,0
+PRD-HRN-008,Bakwan Jagung Manis,3,none,2000,50,0
+PRD-HRN-009,Nasi Ayam Geprek,3,10%,16000,20,0
+PRD-HRN-010,Bihun Goreng Baso,3,none,12000,15,0
+PRD-HRN-011,Lontong Sayur Betawi,3,10%,12000,10,0
+PRD-HRN-012,Bubur Ayam Cianjur,3,none,10000,15,0
+PRD-HRN-013,Nasi Gudeg Telur,3,10%,18000,10,0
+PRD-KRG-001,Keripik Singkong Pedas 150g,4,10%,8000,35,0
+PRD-KRG-002,Keripik Pisang Cokelat 100g,4,10%,10000,30,0
+PRD-KRG-003,Kacang Bawang Renyah 200g,4,20%,12000,25,0
+PRD-KRG-004,Keripik Kentang Balado,4,10%,15000,20,0
+PRD-KRG-005,Kue Kering Kastengel Toples,4,20%,45000,15,0
+PRD-KRG-006,Kue Nastar Selai Nanas,4,20%,40000,15,0
+PRD-KRG-007,Basreng Pedas Jeruk Nipis,4,none,7000,40,0
+PRD-KRG-008,Makaroni Spiral Keju,4,none,6000,45,0
+PRD-KRG-009,Sus Kering Isi Cokelat,4,10%,9000,25,0
+PRD-KRG-010,Roti Kering Bagelen,4,none,12000,20,0
+PRD-KRG-011,Emping Melinjo Asin,4,10%,15000,15,0
+PRD-KRG-012,Stik Bawang Renyah,4,none,8000,30,0
