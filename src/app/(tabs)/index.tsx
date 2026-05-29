@@ -8,6 +8,7 @@ import {
   Pressable,
   Dimensions,
   Animated as RNAnimated,
+  RefreshControl,
 } from 'react-native';
 import { Text, Searchbar, Badge, Button, Portal, Modal, Divider, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -95,6 +96,8 @@ export default function HomeScreen() {
     setFilteredProducts(filtered);
   }, [products, selectedCategory, searchQuery]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const loadProducts = async () => {
     try {
       const data = await getAllProduk();
@@ -102,6 +105,12 @@ export default function HomeScreen() {
     } catch (e) {
       console.error('Failed to load products:', e);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProducts();
+    setRefreshing(false);
   };
 
   const handleAddToCart = useCallback(
@@ -157,7 +166,13 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+        }
+      >
         {/* Hero Carousel */}
         <View style={styles.carouselContainer}>
           <FlatList

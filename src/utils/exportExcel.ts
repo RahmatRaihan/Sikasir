@@ -1,8 +1,8 @@
+// Export Excel utility using SheetJS (xlsx)
+// Uses expo-file-system/legacy for StorageAccessFramework (Android SAF)
 import * as XLSX from 'xlsx';
-import { File, Paths } from 'expo-file-system';
-import * as FileSystem from 'expo-file-system';
+import * as LegacyFS from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { formatRupiah } from './formatRupiah';
 import type { LaporanHarian, RingkasanBagiHasil } from '../db/queries/laporan';
 import { Alert, Platform } from 'react-native';
 
@@ -146,55 +146,56 @@ export async function exportLaporanExcel(
 
   XLSX.utils.book_append_sheet(wb, ws2, 'Ringkasan Bagi Hasil');
 
-  // Generate file as base64 and Uint8Array
+  // Generate file as base64
   const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-  const uint8 = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
-  
   const fileName = `Laporan_${periodeLabel.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
-
-  // Write to cache first (for iOS or fallback)
-  const file = new File(Paths.cache, fileName);
-  file.create({ overwrite: true });
-  file.bytes = uint8;
-
   const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  // Write to cache first using legacy API (for sharing fallback)
+  const cacheUri = LegacyFS.cacheDirectory + fileName;
+  await LegacyFS.writeAsStringAsync(cacheUri, base64Data, {
+    encoding: LegacyFS.EncodingType.Base64,
+  });
 
   // Platform specific saving
   if (Platform.OS === 'android') {
     try {
       // Minta izin ke user untuk memilih folder penyimpanan (misal: Downloads)
-      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-      
+      const permissions = await LegacyFS.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
       if (permissions.granted) {
         // Buat file kosong di folder yang dipilih
-        const uri = await FileSystem.StorageAccessFramework.createFileAsync(
+        const safUri = await LegacyFS.StorageAccessFramework.createFileAsync(
           permissions.directoryUri,
           fileName,
           mimeType
         );
-        
+
         // Tulis data base64 ke file tersebut
-        await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, base64Data, {
-          encoding: FileSystem.EncodingType.Base64,
+        await LegacyFS.writeAsStringAsync(safUri, base64Data, {
+          encoding: LegacyFS.EncodingType.Base64,
         });
 
-        Alert.alert('Export Berhasil', `File Excel telah disimpan ke dalam penyimpanan internal Anda.\n\nNama file: ${fileName}`);
-        return uri;
+        Alert.alert(
+          'Export Berhasil ✅',
+          `File Excel telah disimpan ke penyimpanan internal Anda.\n\nNama file: ${fileName}`
+        );
+        return safUri;
       } else {
         // Jika batal pilih folder, fallback ke mode Share
-        await shareFallback(file.uri, mimeType, fileName);
+        await shareFallback(cacheUri, mimeType, fileName);
       }
     } catch (e: any) {
       console.error('SAF Error:', e);
-      // Fallback
-      await shareFallback(file.uri, mimeType, fileName);
+      // Fallback ke share
+      await shareFallback(cacheUri, mimeType, fileName);
     }
   } else {
     // iOS / platform lain
-    await shareFallback(file.uri, mimeType, fileName);
+    await shareFallback(cacheUri, mimeType, fileName);
   }
 
-  return file.uri;
+  return cacheUri;
 }
 
 // Helper untuk fallback ke menu Share bawaan OS

@@ -1,6 +1,6 @@
 // Dashboard Screen — Monitoring performa penjualan
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, RefreshControl } from 'react-native';
 import { Text, Divider, Button, SegmentedButtons } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
@@ -51,6 +51,13 @@ export default function DashboardScreen() {
     }
   }, [filter.penyediaId, filter.bulan, viewMode, selectedDate]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
+  };
+
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
@@ -86,7 +93,13 @@ export default function DashboardScreen() {
         <MaterialCommunityIcons name="chart-bar" size={28} color={Colors.white} />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+        }
+      >
         {/* Filter */}
         <View style={styles.filterContainer}>
           {/* Period Toggle */}

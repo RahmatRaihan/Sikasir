@@ -239,3 +239,16 @@ BEGIN
   ORDER BY p.id ASC;
 END;
 $$ LANGUAGE plpgsql;
+
+-- RPC: Restore stock when deleting a transaction
+CREATE OR REPLACE FUNCTION restore_stock(
+  p_produk_id INTEGER,
+  p_qty INTEGER
+) RETURNS VOID AS $$
+BEGIN
+  UPDATE produk
+  SET stok_fisik = stok_fisik + p_qty,
+      updated_at = NOW()
+  WHERE id = p_produk_id;
+END;
+$$ LANGUAGE plpgsql;

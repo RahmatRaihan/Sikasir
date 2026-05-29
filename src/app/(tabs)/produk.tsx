@@ -1,6 +1,6 @@
 // Produk Screen — Product management (CRUD + Retur)
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Text, Searchbar, Button, DataTable, IconButton, Divider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -28,6 +28,7 @@ export default function ProdukScreen() {
     visible: false,
     product: null,
   });
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadProducts();
@@ -43,6 +44,12 @@ export default function ProdukScreen() {
     } catch (e) {
       console.error('Load products error:', e);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProducts();
+    setRefreshing(false);
   };
 
   const handleAddProduct = async (data: ProductFormData) => {
@@ -161,7 +168,12 @@ export default function ProdukScreen() {
             </DataTable.Title>
           </DataTable.Header>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+            }
+          >
             {products.map((product) => {
               const penyedia = getPenyediaById(product.penyediaId!);
               const isLowStock = product.stokFisik <= 5;

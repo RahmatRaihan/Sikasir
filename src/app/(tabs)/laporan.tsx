@@ -1,7 +1,7 @@
 // Laporan Screen — Reports with daily/monthly view, bagi hasil, and export
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, DataTable, Divider, SegmentedButtons } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import { Text, Button, DataTable, Divider, SegmentedButtons, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { Colors, Spacing, BorderRadius, Shadows } from '@/constants/theme';
@@ -13,6 +13,8 @@ import { getLaporanHarian, getRingkasanBagiHasil } from '@/db/queries/laporan';
 import type { LaporanHarian, RingkasanBagiHasil } from '@/db/queries/laporan';
 import { exportLaporanExcel } from '@/utils/exportExcel';
 import { getPenyediaById } from '@/constants/penyedia';
+import { getTransaksiByDate, getTransaksiByMonth } from '@/db/queries/transaksi';
+import { supabase } from '@/db/supabaseClient';
 
 export default function LaporanScreen() {
   const filter = useFilterStore();
@@ -21,6 +23,8 @@ export default function LaporanScreen() {
   const [dataHarian, setDataHarian] = useState<LaporanHarian[]>([]);
   const [dataBagiHasil, setDataBagiHasil] = useState<RingkasanBagiHasil[]>([]);
   const [exporting, setExporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [transaksiList, setTransaksiList] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -29,6 +33,12 @@ export default function LaporanScreen() {
       const bagiHasil = await getRingkasanBagiHasil(periode, filter.penyediaId);
       setDataHarian(harian);
       setDataBagiHasil(bagiHasil);
+
+      // Load transaksi list
+      const trxData = viewMode === 'harian'
+        ? await getTransaksiByDate(selectedDate)
+        : await getTransaksiByMonth(filter.bulan);
+      setTransaksiList(trxData);
     } catch (e) {
       console.error('Load laporan error:', e);
     }
@@ -37,6 +47,12 @@ export default function LaporanScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -58,6 +74,61 @@ export default function LaporanScreen() {
       });
     }
     setExporting(false);
+  };
+
+  // Delete transaksi (with confirmation)
+  const handleDeleteTransaksi = (id: number, nomorTransaksi: string) => {
+    Alert.alert(
+      'Hapus Transaksi',
+      `Anda yakin ingin menghapus transaksi ${nomorTransaksi}?\n\nStok produk yang terkait akan dikembalikan.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Get items to restore stock
+              const { data: items } = await supabase
+                .from('transaksi_item')
+                .select('produk_id, qty')
+                .eq('transaksi_id', id);
+
+              // Restore stock for each item
+              if (items) {
+                for (const item of items) {
+                  await supabase.rpc('restore_stock', {
+                    p_produk_id: item.produk_id,
+                    p_qty: item.qty,
+                  });
+                }
+              }
+
+              // Delete items then transaction
+              await supabase.from('transaksi_item').delete().eq('transaksi_id', id);
+              await supabase.from('transaksi').delete().eq('id', id);
+
+              Toast.show({
+                type: 'success',
+                text1: '✓ Transaksi dihapus',
+                text2: `${nomorTransaksi} berhasil dihapus`,
+                position: 'bottom',
+              });
+
+              // Reload data
+              await loadData();
+            } catch (e: any) {
+              Toast.show({
+                type: 'error',
+                text1: 'Gagal menghapus',
+                text2: e.message,
+                position: 'bottom',
+              });
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Navigate date
@@ -176,7 +247,13 @@ export default function LaporanScreen() {
         />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
+        }
+      >
         {/* Tabel 1: Rincian Penjualan Harian */}
         <View style={[styles.tableCard, Shadows.md]}>
           <Text style={styles.tableTitle}>📊 Rincian Penjualan {viewMode === 'harian' ? 'Hari Ini' : 'Harian'}</Text>
@@ -408,6 +485,80 @@ export default function LaporanScreen() {
           </ScrollView>
         </View>
 
+        {/* Tabel 3: Daftar Transaksi (with edit/delete) */}
+        <View style={[styles.tableCard, Shadows.md]}>
+          <Text style={styles.tableTitle}>🧾 Daftar Transaksi</Text>
+          <Divider style={{ marginVertical: Spacing.md }} />
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+            <DataTable style={{ minWidth: 700 }}>
+              <DataTable.Header style={styles.tableHeader}>
+                <DataTable.Title style={{ width: 160 }}>
+                  <Text style={styles.headerCell}>No. Transaksi</Text>
+                </DataTable.Title>
+                <DataTable.Title style={{ width: 110 }}>
+                  <Text style={styles.headerCell}>Tanggal</Text>
+                </DataTable.Title>
+                <DataTable.Title style={{ width: 100 }}>
+                  <Text style={styles.headerCell}>Metode</Text>
+                </DataTable.Title>
+                <DataTable.Title style={styles.colAmount} numeric>
+                  <Text style={styles.headerCell}>Total (Rp)</Text>
+                </DataTable.Title>
+                <DataTable.Title style={{ width: 100 }}>
+                  <Text style={styles.headerCell}>Aksi</Text>
+                </DataTable.Title>
+              </DataTable.Header>
+
+              {transaksiList.length === 0 ? (
+                <View style={styles.emptyTable}>
+                  <Text style={styles.emptyText}>Belum ada transaksi</Text>
+                </View>
+              ) : (
+                transaksiList.map((trx) => (
+                  <DataTable.Row key={trx.id} style={styles.tableRow}>
+                    <DataTable.Cell style={{ width: 160 }}>
+                      <Text style={[styles.cellText, { fontFamily: 'monospace', fontSize: 11 }]}>
+                        {trx.nomor_transaksi}
+                      </Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={{ width: 110 }}>
+                      <Text style={styles.cellText}>{trx.tanggal}</Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={{ width: 100 }}>
+                      <View style={[
+                        styles.metodeBadge,
+                        { backgroundColor: trx.metode_bayar === 'QRIS' ? '#E8F5E9' : '#E3F2FD' }
+                      ]}>
+                        <Text style={[
+                          styles.metodeBadgeText,
+                          { color: trx.metode_bayar === 'QRIS' ? '#2E7D32' : '#1565C0' }
+                        ]}>
+                          {trx.metode_bayar}
+                        </Text>
+                      </View>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={styles.colAmount} numeric>
+                      <Text style={styles.amountText}>{formatRupiah(trx.total_tagihan)}</Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={{ width: 100 }}>
+                      <View style={{ flexDirection: 'row', gap: 2 }}>
+                        <IconButton
+                          icon="delete-outline"
+                          iconColor={Colors.danger}
+                          size={20}
+                          onPress={() => handleDeleteTransaksi(trx.id, trx.nomor_transaksi)}
+                          style={{ margin: 0 }}
+                        />
+                      </View>
+                    </DataTable.Cell>
+                  </DataTable.Row>
+                ))
+              )}
+            </DataTable>
+          </ScrollView>
+        </View>
+
         <View style={{ height: Spacing.xxxl * 2 }} />
       </ScrollView>
     </View>
@@ -556,5 +707,14 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: Colors.textSecondary,
+  },
+  metodeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.round,
+  },
+  metodeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
