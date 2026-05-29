@@ -11,6 +11,7 @@ interface PaymentPanelProps {
   uangDiterima: number;
   kembalian: number;
   isValid: boolean;
+  loading?: boolean;
   onMetodeChange: (metode: 'tunai' | 'qris') => void;
   onUangDiterimaChange: (amount: number) => void;
   onSelesaikan: () => void;
@@ -24,6 +25,7 @@ export default function PaymentPanel({
   uangDiterima,
   kembalian,
   isValid,
+  loading = false,
   onMetodeChange,
   onUangDiterimaChange,
   onSelesaikan,
@@ -114,7 +116,8 @@ export default function PaymentPanel({
         <Button
           mode="contained"
           onPress={onSelesaikan}
-          disabled={!isValid}
+          disabled={!isValid || loading}
+          loading={loading}
           buttonColor={Colors.secondary}
           style={styles.completeButton}
           labelStyle={styles.completeLabel}
@@ -128,7 +131,7 @@ export default function PaymentPanel({
           textColor={Colors.danger}
           style={styles.cancelButton}
           icon="close-circle"
-          disabled={itemCount === 0}
+          disabled={itemCount === 0 || loading}
         >
           Batalkan
         </Button>

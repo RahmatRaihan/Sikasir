@@ -1,6 +1,6 @@
 // Kasir Screen — Split view: product catalog (55%) + cart & payment (45%)
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, FlatList, ScrollView, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, TextInput, KeyboardAvoidingView, Platform, Keyboard, RefreshControl } from 'react-native';
 import { Text, Searchbar, Divider, Portal, Modal, Button, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -25,6 +25,8 @@ export default function KasirScreen() {
   const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
   const [receiptVisible, setReceiptVisible] = useState(false);
   const [lastTransaksi, setLastTransaksi] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const cart = useCartStore();
 
@@ -42,6 +44,12 @@ export default function KasirScreen() {
     } catch (e) {
       console.error('Load products error:', e);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProducts();
+    setRefreshing(false);
   };
 
   // Search autocomplete
@@ -91,6 +99,7 @@ export default function KasirScreen() {
   );
 
   const handleSelesaikanPembayaran = async () => {
+    setLoading(true);
     try {
       const total = cart.getTotalTagihan();
       const result = await createTransaksi({
@@ -128,6 +137,8 @@ export default function KasirScreen() {
         text2: e.message || 'Terjadi kesalahan',
         position: 'bottom',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -143,7 +154,16 @@ export default function KasirScreen() {
       <View style={styles.header}>
         <MaterialCommunityIcons name="cash-register" size={24} color={Colors.white} />
         <Text style={styles.headerTitle}>Layar Kasir</Text>
-        <Text style={styles.headerTime}>{formatTanggal(new Date())} • {formatWaktu(new Date())}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+          <Text style={styles.headerTime}>{formatTanggal(new Date())} • {formatWaktu(new Date())}</Text>
+          <IconButton
+            icon="refresh"
+            iconColor={Colors.white}
+            size={20}
+            onPress={loadProducts}
+            style={{ margin: 0 }}
+          />
+        </View>
       </View>
 
       <View style={styles.splitView}>
@@ -200,6 +220,8 @@ export default function KasirScreen() {
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.productList}
             showsVerticalScrollIndicator={false}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             renderItem={({ item }) => (
               <ProductCard
                 id={item.id}
@@ -266,6 +288,7 @@ export default function KasirScreen() {
             uangDiterima={cart.uangDiterima}
             kembalian={cart.getKembalian()}
             isValid={cart.isPaymentValid()}
+            loading={loading}
             onMetodeChange={cart.setMetodeBayar}
             onUangDiterimaChange={cart.setUangDiterima}
             onSelesaikan={handleSelesaikanPembayaran}
