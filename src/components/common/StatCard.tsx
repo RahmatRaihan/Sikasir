@@ -35,9 +35,7 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    minWidth: 200,
-    marginHorizontal: Spacing.sm / 2,
+    width: 220,
   },
   iconContainer: {
     width: 52,

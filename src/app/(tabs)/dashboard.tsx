@@ -159,7 +159,13 @@ export default function DashboardScreen() {
         </View>
 
         {/* Stat Cards */}
-        <View style={styles.statsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsScroll}
+          style={styles.statsScrollContainer}
+          nestedScrollEnabled={true}
+        >
           <StatCard
             title={viewMode === 'harian' ? 'Kotor Hari Ini' : 'Kotor Bulan Ini'}
             value={formatRupiah(periodSales.kotor)}
@@ -194,7 +200,7 @@ export default function DashboardScreen() {
             icon="wallet"
             color={Colors.secondary}
           />
-        </View>
+        </ScrollView>
 
         {/* Sales Chart (Simple bar chart) */}
         <View style={[styles.chartCard, Shadows.md]}>
@@ -367,10 +373,16 @@ const styles = StyleSheet.create({
     minWidth: 100,
     textAlign: 'center',
   },
-  statsRow: {
+  statsScroll: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  statsScrollContainer: {
+    marginHorizontal: -Spacing.lg,
     marginTop: Spacing.md,
-    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   chartCard: {
     backgroundColor: Colors.white,

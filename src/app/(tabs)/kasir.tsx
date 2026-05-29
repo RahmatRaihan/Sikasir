@@ -1,6 +1,6 @@
 // Kasir Screen — Split view: product catalog (55%) + cart & payment (45%)
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, FlatList, ScrollView, TextInput, KeyboardAvoidingView, Platform, Keyboard, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, TextInput, KeyboardAvoidingView, Platform, Keyboard, RefreshControl, Alert } from 'react-native';
 import { Text, Searchbar, Divider, Portal, Modal, Button, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -23,6 +23,7 @@ export default function KasirScreen() {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [selectedPenyedia, setSelectedPenyedia] = useState<number | null>(null);
   const [cancelDialogVisible, setCancelDialogVisible] = useState(false);
+  const [paymentDialogVisible, setPaymentDialogVisible] = useState(false);
   const [receiptVisible, setReceiptVisible] = useState(false);
   const [lastTransaksi, setLastTransaksi] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -98,7 +99,11 @@ export default function KasirScreen() {
     [cart]
   );
 
-  const handleSelesaikanPembayaran = async () => {
+  const handleSelesaikanPembayaran = () => {
+    setPaymentDialogVisible(true);
+  };
+
+  const executePembayaran = async () => {
     setLoading(true);
     try {
       const total = cart.getTotalTagihan();
@@ -310,6 +315,27 @@ export default function KasirScreen() {
           setCancelDialogVisible(false);
         }}
         onCancel={() => setCancelDialogVisible(false)}
+      />
+
+      {/* Payment Confirmation */}
+      <ConfirmDialog
+        visible={paymentDialogVisible}
+        title="Konfirmasi Pembayaran"
+        message={
+          `Selesaikan transaksi ini?\n\n` +
+          `Total Tagihan: ${formatRupiah(cart.getTotalTagihan())}\n` +
+          `Metode Bayar: ${cart.metodeBayar === 'qris' ? '📱 QRIS' : '💵 TUNAI'}` +
+          (cart.metodeBayar === 'tunai' && cart.uangDiterima > 0
+            ? `\nUang Diterima: ${formatRupiah(cart.uangDiterima)}\nKembalian: ${formatRupiah(cart.getKembalian())}`
+            : '')
+        }
+        confirmLabel="Ya, Selesaikan"
+        confirmColor={Colors.secondary}
+        onConfirm={() => {
+          setPaymentDialogVisible(false);
+          executePembayaran();
+        }}
+        onCancel={() => setPaymentDialogVisible(false)}
       />
 
       {/* Receipt Modal */}
