@@ -57,7 +57,7 @@ export default function HomeScreen() {
   const [cartVisible, setCartVisible] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const slideRef = useRef<FlatList>(null);
-  const slideInterval = useRef<ReturnType<typeof setInterval>>();
+  const slideInterval = useRef<any>(null);
 
   const cart = useCartStore();
   const router = useRouter();

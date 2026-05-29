@@ -131,6 +131,234 @@ export default function LaporanScreen() {
     );
   };
 
+  // Edit transaksi (Toggle / change payment method)
+  const handleEditTransaksi = (trx: any) => {
+    const newMethod = trx.metode_bayar === 'QRIS' ? 'tunai' : 'qris';
+    Alert.alert(
+      'Ubah Metode Bayar',
+      `Ubah metode pembayaran transaksi ${trx.nomor_transaksi} menjadi ${newMethod.toUpperCase()}?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ubah',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('transaksi')
+                .update({ metode_bayar: newMethod })
+                .eq('id', trx.id);
+              if (error) throw error;
+
+              Toast.show({
+                type: 'success',
+                text1: '✓ Berhasil diubah',
+                text2: `Metode bayar ${trx.nomor_transaksi} diubah ke ${newMethod.toUpperCase()}`,
+                position: 'bottom',
+              });
+              await loadData();
+            } catch (e: any) {
+              Toast.show({
+                type: 'error',
+                text1: 'Gagal mengubah',
+                text2: e.message,
+                position: 'bottom',
+              });
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Edit tanggal (Filter to this date)
+  const handleEditTanggal = (tanggal: string) => {
+    setViewMode('harian');
+    setSelectedDate(tanggal);
+    Toast.show({
+      type: 'info',
+      text1: '📅 Filter Tanggal Aktif',
+      text2: `Melihat transaksi untuk tanggal ${tanggal}`,
+      position: 'bottom',
+    });
+  };
+
+  // Hapus semua transaksi pada tanggal tertentu
+  const handleHapusTanggal = (tanggal: string) => {
+    Alert.alert(
+      'Hapus Transaksi Harian',
+      `Anda yakin ingin menghapus semua transaksi pada tanggal ${tanggal}?\n\nStok semua produk yang terjual akan dikembalikan ke kondisi semula.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus Semua',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 1. Get all transactions on this date
+              const { data: trxsFiltered, error: filteredError } = await supabase
+                .from('transaksi')
+                .select('id')
+                .eq('tanggal', tanggal);
+              
+              if (filteredError) throw filteredError;
+              if (!trxsFiltered || trxsFiltered.length === 0) {
+                Toast.show({
+                  type: 'info',
+                  text1: 'Tidak ada transaksi',
+                  text2: 'Tidak ada transaksi yang dapat dihapus pada tanggal ini',
+                  position: 'bottom',
+                });
+                return;
+              }
+
+              const trxIds = trxsFiltered.map(t => t.id);
+
+              // 2. Get all transaction items to restore stock
+              const { data: items, error: itemsError } = await supabase
+                .from('transaksi_item')
+                .select('produk_id, qty')
+                .in('transaksi_id', trxIds);
+
+              if (itemsError) throw itemsError;
+
+              // 3. Restore stock for each item
+              if (items) {
+                for (const item of items) {
+                  await supabase.rpc('restore_stock', {
+                    p_produk_id: item.produk_id,
+                    p_qty: item.qty,
+                  });
+                }
+              }
+
+              // 4. Delete items then transactions
+              await supabase.from('transaksi_item').delete().in('transaksi_id', trxIds);
+              await supabase.from('transaksi').delete().in('id', trxIds);
+
+              Toast.show({
+                type: 'success',
+                text1: '✓ Berhasil Dihapus',
+                text2: `Semua transaksi pada ${tanggal} telah dihapus`,
+                position: 'bottom',
+              });
+
+              await loadData();
+            } catch (e: any) {
+              Toast.show({
+                type: 'error',
+                text1: 'Gagal menghapus',
+                text2: e.message,
+                position: 'bottom',
+              });
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Edit penyedia (Filter to this penyedia)
+  const handleEditPenyedia = (penyediaId: number) => {
+    filter.setPenyediaId(penyediaId);
+    Toast.show({
+      type: 'info',
+      text1: '🏢 Filter Penyedia Aktif',
+      text2: `Hanya menampilkan data penyedia yang dipilih`,
+      position: 'bottom',
+    });
+  };
+
+  // Hapus semua transaksi untuk penyedia tertentu pada periode terpilih
+  const handleHapusPenyedia = (penyediaId: number, namaPenyedia: string) => {
+    const periode = viewMode === 'harian' ? selectedDate : filter.bulan;
+    Alert.alert(
+      'Hapus Data Penyedia',
+      `Anda yakin ingin menghapus semua transaksi untuk penyedia "${namaPenyedia}" pada periode ${periode}?\n\nStok produk terkait akan dikembalikan.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // 1. Get all transaction items for this penyedia in the period
+              const { data: items, error: itemsError } = await supabase
+                .from('transaksi_item')
+                .select('id, transaksi_id, produk_id, qty, transaksi!inner(tanggal)')
+                .eq('penyedia_id', penyediaId)
+                .ilike('transaksi.tanggal', `${periode}%`);
+
+              if (itemsError) throw itemsError;
+              if (!items || items.length === 0) {
+                Toast.show({
+                  type: 'info',
+                  text1: 'Tidak ada data',
+                  text2: `Tidak ada penjualan untuk ${namaPenyedia} pada periode ini`,
+                  position: 'bottom',
+                });
+                return;
+              }
+
+              const itemIds = items.map(i => i.id);
+              const trxIds = Array.from(new Set(items.map(i => i.transaksi_id)));
+
+              // 2. Restore stock for each item
+              for (const item of items) {
+                await supabase.rpc('restore_stock', {
+                  p_produk_id: item.produk_id,
+                  p_qty: item.qty,
+                });
+              }
+
+              // 3. Delete the transaction items
+              await supabase.from('transaksi_item').delete().in('id', itemIds);
+
+              // 4. Clean up any transactions that are now empty (have 0 items)
+              for (const trxId of trxIds) {
+                const { data: remainingItems } = await supabase
+                  .from('transaksi_item')
+                  .select('id')
+                  .eq('transaksi_id', trxId)
+                  .limit(1);
+                
+                if (!remainingItems || remainingItems.length === 0) {
+                  await supabase.from('transaksi').delete().eq('id', trxId);
+                } else {
+                  const { data: allTrxItems } = await supabase
+                    .from('transaksi_item')
+                    .select('subtotal')
+                    .eq('transaksi_id', trxId);
+                  
+                  const newTotal = (allTrxItems || []).reduce((sum, item) => sum + Number(item.subtotal), 0);
+                  await supabase
+                    .from('transaksi')
+                    .update({ total_tagihan: newTotal })
+                    .eq('id', trxId);
+                }
+              }
+
+              Toast.show({
+                type: 'success',
+                text1: '✓ Berhasil Dihapus',
+                text2: `Transaksi ${namaPenyedia} berhasil dihapus`,
+                position: 'bottom',
+              });
+
+              await loadData();
+            } catch (e: any) {
+              Toast.show({
+                type: 'error',
+                text1: 'Gagal menghapus',
+                text2: e.message,
+                position: 'bottom',
+              });
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // Navigate date
   const navigateDate = (direction: -1 | 1) => {
     const d = new Date(selectedDate);
@@ -286,6 +514,9 @@ export default function LaporanScreen() {
                 <DataTable.Title style={styles.colAmount} numeric>
                   <Text style={styles.headerCell}>Kering+Harian</Text>
                 </DataTable.Title>
+                <DataTable.Title style={styles.colAksi} numeric>
+                  <Text style={styles.headerCell}>Aksi</Text>
+                </DataTable.Title>
               </DataTable.Header>
 
               {dataHarian.length === 0 ? (
@@ -322,6 +553,24 @@ export default function LaporanScreen() {
                       <DataTable.Cell style={styles.colAmount} numeric>
                         <Text style={styles.cellText}>{formatRupiah(row.jumlahKeringHarian)}</Text>
                       </DataTable.Cell>
+                      <DataTable.Cell style={styles.colAksi} numeric>
+                        <View style={{ flexDirection: 'row', gap: 2, justifyContent: 'flex-end' }}>
+                          <IconButton
+                            icon="pencil-outline"
+                            iconColor={Colors.primary}
+                            size={18}
+                            onPress={() => handleEditTanggal(row.tanggal)}
+                            style={{ margin: 0 }}
+                          />
+                          <IconButton
+                            icon="delete-outline"
+                            iconColor={Colors.danger}
+                            size={18}
+                            onPress={() => handleHapusTanggal(row.tanggal)}
+                            style={{ margin: 0 }}
+                          />
+                        </View>
+                      </DataTable.Cell>
                     </DataTable.Row>
                   ))}
 
@@ -350,6 +599,9 @@ export default function LaporanScreen() {
                     </DataTable.Cell>
                     <DataTable.Cell style={styles.colAmount} numeric>
                       <Text style={styles.totalText}>{formatRupiah(totalHarian.keringHarian)}</Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={styles.colAksi} numeric>
+                      <Text>{''}</Text>
                     </DataTable.Cell>
                   </DataTable.Row>
                 </>
@@ -389,6 +641,9 @@ export default function LaporanScreen() {
                 </DataTable.Title>
                 <DataTable.Title style={styles.colAmount} numeric>
                   <Text style={styles.headerCell}>Pendapatan Bersih</Text>
+                </DataTable.Title>
+                <DataTable.Title style={styles.colAksi} numeric>
+                  <Text style={styles.headerCell}>Aksi</Text>
                 </DataTable.Title>
               </DataTable.Header>
 
@@ -434,6 +689,24 @@ export default function LaporanScreen() {
                         <DataTable.Cell style={styles.colAmount} numeric>
                           <Text style={styles.amountText}>{formatRupiah(row.pendapatanBersih)}</Text>
                         </DataTable.Cell>
+                        <DataTable.Cell style={styles.colAksi} numeric>
+                          <View style={{ flexDirection: 'row', gap: 2, justifyContent: 'flex-end' }}>
+                            <IconButton
+                              icon="filter-outline"
+                              iconColor={Colors.primary}
+                              size={18}
+                              onPress={() => handleEditPenyedia(row.penyediaId)}
+                              style={{ margin: 0 }}
+                            />
+                            <IconButton
+                              icon="delete-outline"
+                              iconColor={Colors.danger}
+                              size={18}
+                              onPress={() => handleHapusPenyedia(row.penyediaId, row.penyediaNama)}
+                              style={{ margin: 0 }}
+                            />
+                          </View>
+                        </DataTable.Cell>
                       </DataTable.Row>
                     );
                   })}
@@ -477,6 +750,9 @@ export default function LaporanScreen() {
                       <Text style={styles.totalAmount}>
                         {formatRupiah(dataBagiHasil.reduce((s, r) => s + r.pendapatanBersih, 0))}
                       </Text>
+                    </DataTable.Cell>
+                    <DataTable.Cell style={styles.colAksi} numeric>
+                      <Text>{''}</Text>
                     </DataTable.Cell>
                   </DataTable.Row>
                 </>
@@ -543,6 +819,13 @@ export default function LaporanScreen() {
                     </DataTable.Cell>
                     <DataTable.Cell style={{ width: 100 }}>
                       <View style={{ flexDirection: 'row', gap: 2 }}>
+                        <IconButton
+                          icon="pencil-outline"
+                          iconColor={Colors.primary}
+                          size={20}
+                          onPress={() => handleEditTransaksi(trx)}
+                          style={{ margin: 0 }}
+                        />
                         <IconButton
                           icon="delete-outline"
                           iconColor={Colors.danger}
@@ -649,7 +932,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   table: {
-    minWidth: 1160,
+    minWidth: 1300,
   },
   tableHeader: {
     backgroundColor: '#F8F9FA',
@@ -672,6 +955,7 @@ const styles = StyleSheet.create({
   colPenyedia: { width: 110 },
   colAmount: { width: 130 },
   colSmall: { width: 80 },
+  colAksi: { width: 100 },
   cellText: {
     fontSize: 12,
     color: Colors.textPrimary,
